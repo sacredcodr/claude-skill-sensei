@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__ floorplan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0a0a0c; --dots: rgba(255,255,255,.055); --surface: rgba(17,17,21,.86); --card: #141418; --card-hi: #1a1a20;
+  --border: rgba(255,255,255,.07); --border-hi: rgba(255,255,255,.16); --ink: #ececf1; --muted: #8d8d99; --faint: #5c5c68;
+  --accent: #6ea8ff; --accent-soft: rgba(110,168,255,.12); --in: #b98cff; --in-soft: rgba(185,140,255,.12);
+  --edge: rgba(160,166,190,.34); --due: #f5b84a;
+  --radius: 12px; --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --k-ui: #6ea8ff; --k-service: #b98cff; --k-worker: #f472b6; --k-library: #5eead4; --k-feature: #67e8f9;
+  --k-data: #fbbf24; --k-config: #94a3b8; --k-test: #a3e635; --k-script: #c084fc; --k-infra: #94a3b8; --k-external: #a1a1aa;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 13px/1.5 var(--font); -webkit-font-smoothing: antialiased;
+  display: grid; grid-template-rows: 52px 1fr; overflow: hidden; letter-spacing: -.005em; }
+.mono, code { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0; }
+button { font: inherit; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 11px; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
+button:hover { color: var(--ink); border-color: var(--border-hi); }
+button.on { color: var(--accent); border-color: rgba(110,168,255,.45); background: var(--accent-soft); }
+button:disabled { opacity: .35; cursor: default; }
+header { display: flex; align-items: center; gap: 14px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 14px; white-space: nowrap; }
+.brand i { width: 9px; height: 9px; border-radius: 3px; transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--accent), var(--in)); box-shadow: 0 0 12px rgba(110,168,255,.5); }
+#crumbs { color: var(--faint); display: flex; gap: 7px; align-items: center; min-width: 0; white-space: nowrap; }
+#crumbs a { color: var(--muted); cursor: pointer; } #crumbs a:hover { color: var(--ink); }
+#crumbs b { color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.grow { flex: 1; }
+#search { position: relative; }
+#search input { font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 11px; width: 230px; outline: none; transition: border-color .15s; }
+#search input:focus { border-color: var(--border-hi); }
+#search input::placeholder { color: var(--faint); }
+#results { position: absolute; top: 36px; right: 0; width: 360px; max-height: 380px; overflow: auto; z-index: 30; padding: 4px;
+  background: var(--card); border: 1px solid var(--border-hi); border-radius: var(--radius); box-shadow: 0 16px 48px rgba(0,0,0,.6); display: none; }
+#results div { padding: 7px 10px; cursor: pointer; border-radius: 8px; }
+#results div:hover, #results div.hi { background: var(--card-hi); }
+#results small { color: var(--faint); display: block; }
+main { display: grid; grid-template-columns: 1fr 360px; min-height: 0; }
+#stage { position: relative; overflow: hidden; cursor: grab; touch-action: none;
+  background-color: var(--bg); background-image: radial-gradient(var(--dots) 1px, transparent 1.2px); background-size: 22px 22px; }
+#stage.drag { cursor: grabbing; }
+#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+#world.ease { transition: transform .5s cubic-bezier(.2,.8,.2,1); }
+svg#edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+svg#edges path { fill: none; stroke: var(--edge); transition: stroke .15s, opacity .15s; }
+svg#edges path.hit { stroke: transparent; stroke-width: 14px; pointer-events: stroke; cursor: pointer; }
+svg#edges path.back { stroke-dasharray: 4 5; }
+svg#edges path.explicit { stroke-dasharray: 1.5 4.5; stroke-linecap: round; }
+svg#edges path.dim { opacity: .14; }
+svg#edges path.out, svg#edges path.in, svg#edges path.hot { stroke-dasharray: 7 6; animation: run .9s linear infinite; opacity: 1; }
+svg#edges path.out { stroke: var(--accent); } svg#edges path.in { stroke: var(--in); } svg#edges path.hot { stroke: var(--accent); stroke-width: 2.6px !important; }
+svg#edges path.hop { stroke: var(--accent); stroke-dasharray: 2 6; stroke-width: 2px; stroke-linecap: round; animation: run .9s linear infinite; }
+@keyframes run { to { stroke-dashoffset: -26; } }
+.elabel { position: absolute; font: 500 10.5px var(--font); color: var(--muted); background: var(--bg); border: 1px solid var(--border);
+  padding: 1px 7px; border-radius: 99px; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none; transition: opacity .15s, color .15s; }
+.elabel.dim { opacity: .15; } .elabel.out { color: var(--accent); border-color: rgba(110,168,255,.4); } .elabel.in { color: var(--in); border-color: rgba(185,140,255,.4); }
+.node { position: absolute; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 11px 13px;
+  cursor: pointer; user-select: none; overflow: hidden; transition: opacity .18s, border-color .18s, box-shadow .18s, background .18s;
+  box-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px rgba(0,0,0,.35); }
+.node:hover { border-color: var(--border-hi); background: var(--card-hi); }
+.node.sel { border-color: rgba(110,168,255,.6); box-shadow: 0 0 0 3px var(--accent-soft), 0 8px 28px rgba(0,0,0,.45); }
+.node.flow { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), 0 0 32px rgba(110,168,255,.25); }
+.node.nb-out { border-color: rgba(110,168,255,.45); } .node.nb-in { border-color: rgba(185,140,255,.45); }
+.node.dim { opacity: .28; }
+.node .top { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: var(--faint); }
+.node .top .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--kc); box-shadow: 0 0 8px var(--kc); flex: none; }
+.node .top .k { text-transform: lowercase; color: var(--muted); }
+.node .top .cnt { margin-left: auto; }
+.node .lbl { font-weight: 600; font-size: 14px; margin: 5px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.node .sum { color: var(--muted); font-size: 12px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.node .meta { display: flex; gap: 6px; margin-top: 8px; font-size: 10.5px; color: var(--faint); flex-wrap: wrap; align-items: center; }
+.node.file { padding: 9px 12px; }
+.node.file .lbl { font-size: 13px; font-weight: 500; margin: 0 0 1px; }
+.node.file .path { color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
+.node.neighbor { background: transparent; border-style: dashed; box-shadow: none; }
+.node.ext { background: transparent; }
+.node.hidden-name .lbl { color: var(--accent); }
+.pill { border-radius: 99px; padding: 0 7px; border: 1px solid var(--border); color: var(--muted); }
+.pill.due { color: var(--due); border-color: rgba(245,184,74,.35); }
+.heat { display: inline-flex; align-items: center; gap: 4px; }
+.heat::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #ff8a5c; opacity: var(--h); }
+aside { border-left: 1px solid var(--border); background: var(--bg); overflow: auto; padding: 20px 20px 40px; }
+aside .eyebrow { font-size: 11px; color: var(--faint); display: flex; align-items: center; gap: 7px; }
+aside .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--kc); }
+aside h2 { font-size: 18px; font-weight: 600; margin: 6px 0 6px; letter-spacing: -.015em; }
+aside h2 a { color: var(--ink); cursor: pointer; } aside h2 a:hover { color: var(--accent); }
+aside h3 { font-size: 11px; font-weight: 500; color: var(--faint); margin: 22px 0 6px; }
+aside p { margin: 6px 0; color: var(--ink); }
+aside .muted { color: var(--muted); }
+aside ul { list-style: none; margin: 0; padding: 0; }
+aside li { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; justify-content: space-between; align-items: baseline; }
+aside li a { color: var(--ink); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+aside li a:hover { color: var(--accent); }
+aside li .n { color: var(--faint); white-space: nowrap; font-size: 12px; }
+aside li.card { display: block; color: var(--ink); }
+aside li.card .mono { color: var(--faint); }
+aside li.card.due::before { content: "due"; color: var(--due); font-size: 10.5px; border: 1px solid rgba(245,184,74,.35); border-radius: 99px; padding: 0 6px; margin-right: 6px; }
+aside li.pair { font-family: var(--mono); font-size: 11.5px; justify-content: flex-start; color: var(--muted); }
+aside li.pair span { color: var(--faint); }
+.stats { display: flex; gap: 18px; margin: 12px 0 4px; }
+.stats div { display: flex; flex-direction: column; } .stats b { font-size: 16px; font-weight: 600; } .stats span { font-size: 11px; color: var(--faint); }
+.flowbtn { display: block; width: 100%; text-align: left; margin: 6px 0; padding: 9px 12px; color: var(--ink); background: var(--card); }
+.flowbtn small { display: block; color: var(--faint); }
+.actions { display: flex; gap: 8px; margin-top: 12px; }
+.key { display: grid; grid-template-columns: 26px 1fr; gap: 6px 8px; align-items: center; color: var(--muted); font-size: 12px; }
+.key svg { overflow: visible; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--kc); }
+#flowbar { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); width: min(620px, calc(100% - 32px));
+  background: var(--surface); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border-hi);
+  border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.55); padding: 13px 15px; display: none; z-index: 10; }
+#flowbar .top { display: flex; align-items: center; gap: 8px; }
+#flowbar .title { font-weight: 600; flex: 1; }
+#flowbar .progress { height: 2px; background: var(--border); border-radius: 2px; margin: 10px 0 8px; overflow: hidden; }
+#flowbar .progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--in)); transition: width .3s; }
+#flowbar .where { color: var(--faint); }
+#flowbar .note { margin-top: 4px; }
+#err { position: fixed; bottom: 8px; left: 8px; color: #f87171; font: 12px var(--mono); z-index: 99; }
+@media (prefers-reduced-motion: reduce) { svg#edges path { animation: none !important; } #world.ease { transition: none; } }
+@media (max-width: 760px) {
+  main { grid-template-columns: 1fr; grid-template-rows: 1fr 42%; }
+  aside { border-left: 0; border-top: 1px solid var(--border); }
+  #search input { width: 130px; } #crumbs { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><i></i><span id="title"></span></div>
+  <div id="crumbs"></div>
+  <div class="grow"></div>
+  <div id="search"><input id="q" placeholder="Search  /" autocomplete="off"><div id="results"></div></div>
+  <button id="quiz" title="Hide names and recall them (q)">Quiz</button>
+  <button id="fit" title="Fit to screen (f)">Fit</button>
+</header>
+<main>
+  <div id="stage">
+    <div id="world"><svg id="edges"><defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="rgba(160,166,190,.6)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+      <marker id="arrow-out" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto"><path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#6ea8ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>
+      <marker id="arrow-in" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto"><path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#b98cff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    </defs><g id="paths"></g><g id="hits"></g></svg><div id="labels"></div><div id="nodes"></div></div>
+    <div id="flowbar"><div class="top"><span class="title" id="ftitle"></span><span class="mono" id="fstep" style="color:var(--faint)"></span>
+      <button id="fprev" title="Previous (←)">←</button><button id="fnext" title="Next (→)">→</button><button id="fclose" title="Close (Esc)">✕</button></div>
+      <div class="progress"><i id="fprog"></i></div>
+      <div class="where mono" id="fwhere"></div><div class="note" id="fnote"></div></div>
+  </div>
+  <aside id="panel"></aside>
+</main>
+<div id="err"></div>
+<script id="data" type="application/json">__FLOORPLAN_DATA__</script>
+<script>
+"use strict";
+window.onerror = (m, s, l) => { document.getElementById("err").textContent = "error: " + m + " @" + l; };
+const D = JSON.parse(document.getElementById("data").textContent);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const kc = (k) => `var(--k-${k || "library"})`;
+const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n);
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const base = (f) => f.split("/").pop();
+const dir = (f) => f.split("/").slice(0, -1).join("/") || ".";
+const SEP = "\u241e"; // ␞: survives HTML attributes, never in a path or id
+
+// ---- model ---------------------------------------------------------------------------------------
+const parts = Object.fromEntries(D.parts.map((p) => [p.id, p]));
+const owner = (ref) => parts[ref] ? ref : D.files[ref]?.part;
+const filesOf = {};
+for (const [f, v] of Object.entries(D.files)) (filesOf[v.part] ||= []).push(f);
+const uses = {}, usedBy = {};
+for (const [s, t] of D.edges) { (uses[s] ||= []).push(t); (usedBy[t] ||= []).push(s); }
+const cardsOn = (ref) => D.cards[ref] || [];
+const partCards = (id) => [...cardsOn(id), ...(filesOf[id] || []).flatMap(cardsOn)];
+// The folder all of a part's files share, so file cards show only the rest of their path.
+const prefixOf = {};
+for (const [id, fs] of Object.entries(filesOf)) {
+  let pre = dir(fs[0]).split("/");
+  for (const f of fs) { const d = dir(f).split("/"); let i = 0; while (i < pre.length && pre[i] === d[i]) i++; pre = pre.slice(0, i); }
+  prefixOf[id] = pre.join("/");
+}
+const relDir = (f) => { const d = dir(f), pre = prefixOf[D.files[f].part]; return pre && d.startsWith(pre) ? d.slice(pre.length + 1) : d === "." ? "" : d; };
+const partStats = {};
+for (const p of D.parts) {
+  const fs = filesOf[p.id] || [];
+  partStats[p.id] = { files: fs.length, loc: fs.reduce((a, f) => a + D.files[f].loc, 0),
+    heat: fs.reduce((a, f) => a + D.files[f].heat, 0), routes: fs.reduce((a, f) => a + D.files[f].routes.length, 0) };
+}
+const maxHeat = Math.max(1, ...D.parts.map((p) => partStats[p.id].heat));
+
+// Edges collect the file pairs and hand-written labels behind them, so a click can explain an arrow.
+function edgeBag() {
+  const m = new Map();
+  return { m, add(a, b, pair, label) {
+    if (!a || !b || a === b) return;
+    const k = a + SEP + b, e = m.get(k) || { from: a, to: b, weight: 0, pairs: [], labels: [] };
+    if (pair) { e.weight++; e.pairs.push(pair); }
+    if (label !== undefined) { e.labels.push(label || "linked"); e.explicit = true; }
+    m.set(k, e);
+  } };
+}
+const PE = (() => {
+  const bag = edgeBag();
+  for (const [s, t] of D.edges) bag.add(D.files[s].part, D.files[t].part, [s, t]);
+  for (const e of D.explicit) bag.add(owner(e.from), owner(e.to), null, e.label || "");
+  return [...bag.m.values()];
+})();
+
+// ---- state ---------------------------------------------------------------------------------------
+const S = { view: "overview", sel: null, selEdge: null, hover: null, hoverEdge: null, quiz: false, revealed: new Set(), flow: null, step: 0, noteShown: false };
+try { S.quiz = localStorage.getItem("fp-quiz") === "1"; } catch (e) {}
+const named = (id) => !S.quiz || S.revealed.has(id);
+const label = (id) => parts[id] ? (named(id) ? parts[id].label : "?") : base(id);
+
+// ---- layout ---------------------------------------------------------------------------------------
+// Layered (Sugiyama-style): break cycles, rank by longest path, wrap tall ranks into sub-columns,
+// thread long edges through invisible waypoints so they run in the gaps between cards instead of
+// behind them, then order each column by the average position of its neighbours.
+function layout(nodes, edges, opt = {}) {
+  const ids = nodes.map((n) => n.id), idx = new Map(ids.map((id, i) => [id, i])), n = ids.length;
+  const E = edges.map((e, i) => ({ u: idx.get(e.from), v: idx.get(e.to), i })).filter((e) => e.u !== undefined && e.v !== undefined && e.u !== e.v);
+  const adj = ids.map(() => []); E.forEach((e) => adj[e.u].push(e));
+  const color = new Array(n).fill(0), back = new Set();
+  const visit = (u) => { color[u] = 1; for (const e of adj[u]) { if (color[e.v] === 1) back.add(e.i); else if (!color[e.v]) visit(e.v); } color[u] = 2; };
+  for (let i = 0; i < n; i++) if (!color[i]) visit(i);
+  const F = E.filter((e) => !back.has(e.i)), out = ids.map(() => []), inn = ids.map(() => []);
+  F.forEach((e) => { out[e.u].push(e.v); inn[e.v].push(e.u); });
+  const rank = new Array(n).fill(0), deg = inn.map((x) => x.length), q = [], order = [];
+  for (let i = 0; i < n; i++) if (!deg[i]) q.push(i);
+  while (q.length) { const u = q.shift(); order.push(u); for (const v of out[u]) { rank[v] = Math.max(rank[v], rank[u] + 1); if (!--deg[v]) q.push(v); } }
+  for (const u of [...order].reverse()) if (out[u].length && !inn[u].length) rank[u] = Math.min(...out[u].map((v) => rank[v])) - 1;
+  const lo = Math.min(0, ...rank); for (let i = 0; i < n; i++) rank[i] -= lo;
+  const hi = Math.max(0, ...rank);
+  nodes.forEach((nd, i) => { if (nd.pin === "first") rank[i] = -1; if (nd.pin === "last") rank[i] = hi + 1; });
+  // a first ordering of real nodes, used to decide how tall ranks wrap
+  const ranks = [...new Set(rank)].sort((a, b) => a - b), byRank = new Map(ranks.map((r) => [r, []]));
+  ids.forEach((_, i) => byRank.get(rank[i]).push(i));
+  const pos = new Array(n).fill(0); byRank.forEach((l) => l.forEach((i, j) => (pos[i] = j)));
+  const bc = (i, nb) => nb.length ? nb.reduce((a, j) => a + pos[j], 0) / nb.length : pos[i];
+  for (let p = 0; p < 4; p++) for (const r of p % 2 ? [...ranks].reverse() : ranks) {
+    const l = byRank.get(r); l.sort((a, b) => bc(a, p % 2 ? out[a] : inn[a]) - bc(b, p % 2 ? out[b] : inn[b])); l.forEach((i, j) => (pos[i] = j));
+  }
+  const maxRows = opt.maxRows || 12, col = new Array(n).fill(0), cols = [];
+  for (const r of ranks) {
+    const l = byRank.get(r);
+    for (let s = 0; s < l.length; s += maxRows) {
+      const ch = l.slice(s, s + maxRows); ch.forEach((i) => (col[i] = cols.length));
+      cols.push({ items: ch.map((i) => ({ id: ids[i], i })), tight: s + maxRows < l.length });
+    }
+  }
+  const succ = new Map(), pred = new Map(), routes = {};
+  const link = (a, b) => { if (!succ.has(a)) succ.set(a, []); if (!pred.has(b)) pred.set(b, []); succ.get(a).push(b); pred.get(b).push(a); };
+  for (const e of F) {
+    let a = ids[e.u]; const chain = [];
+    for (let k = col[e.u] + 1; k < col[e.v]; k++) { const d = `\u0001${e.i}:${k}`; cols[k].items.push({ id: d, i: -1 }); chain.push(d); link(a, d); a = d; }
+    link(a, ids[e.v]); routes[e.i] = chain;
+  }
+  const P = new Map(); cols.forEach((c) => c.items.forEach((it, j) => P.set(it.id, j)));
+  const bary = (id, nb) => { const l = nb.get(id) || []; return l.length ? l.reduce((a, x) => a + P.get(x), 0) / l.length : P.get(id); };
+  for (let p = 0; p < 8; p++) {
+    const seq = p % 2 ? [...cols.keys()].reverse() : [...cols.keys()], nb = p % 2 ? succ : pred;
+    for (const k of seq) {
+      const c = cols[k], b = new Map(c.items.map((it) => [it.id, bary(it.id, nb)]));
+      c.items.sort((x, y) => b.get(x.id) - b.get(y.id)); c.items.forEach((it, j) => P.set(it.id, j));
+    }
+  }
+  const gapX = opt.gapX || 100, gapY = opt.gapY || 18, dh = 6, xy = {}, way = {};
+  let x = 0;
+  cols.forEach((c) => {
+    const w = Math.max(...c.items.filter((it) => it.i >= 0).map((it) => nodes[it.i].w));
+    const hOf = (it) => it.i >= 0 ? nodes[it.i].h : dh;
+    const total = c.items.reduce((a, it) => a + hOf(it), 0) + gapY * Math.max(0, c.items.length - 1);
+    let y = -total / 2;
+    for (const it of c.items) {
+      if (it.i >= 0) xy[it.id] = { x, y, w: nodes[it.i].w, h: nodes[it.i].h }; else way[it.id] = { x, y: y + dh / 2, w };
+      y += hOf(it) + gapY;
+    }
+    x += w + (c.tight ? 30 : gapX);
+  });
+  const via = {}; for (const [i, chain] of Object.entries(routes)) via[i] = chain.map((d) => way[d]);
+  return { xy, via, back };
+}
+
+// ---- cards -----------------------------------------------------------------------------------------
+function cardBadges(cs) {
+  if (!cs.length) return "";
+  const due = cs.filter((c) => c.due).length;
+  return `<span class="pill ${due ? "due" : ""}">${plural(cs.length, "card")}${due ? ` · ${due} due` : ""}</span>`;
+}
+function partNode(p, extra = {}) {
+  const st = partStats[p.id], ext = p.kind === "external", shown = named(p.id);
+  return { id: p.id, w: 256, h: ext ? 96 : 118, kind: p.kind, ...extra,
+    cls: "part" + (ext ? " ext" : "") + (shown ? "" : " hidden-name") + (extra.cls ? " " + extra.cls : ""),
+    html: () => `<div class="top"><span class="dot"></span><span class="k">${esc(p.kind)}</span>
+        <span class="cnt">${st.files ? `${plural(st.files, "file")} · ${fmt(st.loc)}` : ""}</span></div>
+      <div class="lbl">${shown ? esc(p.label) : "?"}</div>
+      <div class="sum">${shown ? esc(p.summary || "") : esc(sampleFiles(p.id))}</div>
+      <div class="meta">${st.routes ? `<span class="pill">${plural(st.routes, "endpoint")}</span>` : ""}${cardBadges(partCards(p.id))}
+        ${st.heat ? `<span class="heat" style="--h:${(0.3 + 0.7 * st.heat / maxHeat).toFixed(2)}" title="changes in the last year">${st.heat}</span>` : ""}</div>` };
+}
+function sampleFiles(id) { const fs = filesOf[id] || []; return fs.length ? fs.slice(0, 3).map(base).join(", ") + (fs.length > 3 ? "…" : "") : "outside service"; }
+function fileNode(f) {
+  const v = D.files[f], note = D.notes?.[f], sub = note && named(f) ? note : relDir(f) ? relDir(f) + "/" : "";
+  return { id: f, w: 236, h: sub ? 76 : 58, cls: "file", kind: parts[v.part].kind, html: () => `
+    <div class="lbl">${esc(base(f))}</div>${sub ? `<div class="path ${note && named(f) ? "" : "mono"}">${esc(sub)}</div>` : ""}
+    <div class="meta"><span>${fmt(v.loc)} lines</span>${v.routes.length ? `<span class="pill">${plural(v.routes.length, "endpoint")}</span>` : ""}
+    ${cardBadges(cardsOn(f))}${v.heat ? `<span class="heat" style="--h:${Math.min(1, .3 + v.heat / 10).toFixed(2)}">${v.heat}</span>` : ""}</div>` };
+}
+
+// ---- views -----------------------------------------------------------------------------------------
+let XY = {}, VIA = {}, BACK = new Set(), VIEW_EDGES = [];
+function build() {
+  let nodes, edges;
+  if (S.view === "overview") {
+    nodes = D.parts.map((p) => partNode(p));
+    edges = PE;
+  } else {
+    const P = S.view, inP = new Set(filesOf[P] || []), bag = edgeBag();
+    // A hand-added edge on the part itself is drawn from its largest file, which usually does the work.
+    const main = [...inP].sort((a, b) => D.files[b].loc - D.files[a].loc)[0];
+    const end = (ref) => inP.has(ref) ? ref : ref === P ? main : parts[ref] ? ref : owner(ref);
+    for (const [s, t] of D.edges) if (inP.has(s) || inP.has(t)) bag.add(end(s), end(t), [s, t]);
+    for (const e of D.explicit) { const a = end(e.from), b = end(e.to); if (inP.has(a) || inP.has(b)) bag.add(a, b, null, e.label || ""); }
+    const ins = new Set(), outs = new Set();
+    for (const e of bag.m.values()) { if (!inP.has(e.from)) ins.add(e.from); if (!inP.has(e.to)) outs.add(e.to); }
+    nodes = [...inP].sort().map(fileNode);
+    for (const id of new Set([...ins, ...outs]))
+      nodes.push(partNode(parts[id], { cls: "neighbor", pin: ins.has(id) && !outs.has(id) ? "first" : outs.has(id) && !ins.has(id) ? "last" : undefined }));
+    edges = [...bag.m.values()];
+  }
+  const L = layout(nodes, edges, S.view === "overview" ? { maxRows: 6, gapX: 120, gapY: 28 } : { maxRows: 10, gapX: 110 });
+  XY = L.xy; VIA = L.via; BACK = L.back; VIEW_EDGES = edges;
+  const wrap = $("nodes"); wrap.innerHTML = "";
+  for (const nd of nodes) {
+    const el = document.createElement("div"), p = XY[nd.id];
+    el.className = "node " + nd.cls; el.dataset.id = nd.id; el.style.setProperty("--kc", kc(nd.kind));
+    Object.assign(el.style, { left: p.x + "px", top: p.y + "px", width: nd.w + "px", height: nd.h + "px" });
+    el.innerHTML = nd.html();
+    el.onclick = (ev) => { ev.stopPropagation(); select(nd.id); };
+    el.ondblclick = (ev) => { ev.stopPropagation(); if (parts[nd.id] && filesOf[nd.id]) go(nd.id); };
+    el.onmouseenter = () => { S.hover = nd.id; decorate(); };
+    el.onmouseleave = () => { if (S.hover === nd.id) { S.hover = null; decorate(); } };
+    wrap.appendChild(el);
+  }
+  drawEdges(); crumbs(); decorate();
+}
+
+// ---- edges -----------------------------------------------------------------------------------------
+// Each node's arrows are spread along its side, ordered by where the next hop sits, so they don't
+// pile into one point.
+let PORTS = new Map();
+function hops(e, i) { return BACK.has(i) || !XY[e.from] || !XY[e.to] || XY[e.to].x <= XY[e.from].x ? null : (VIA[i] || []); }
+function ports() {
+  PORTS = new Map(); const sides = new Map();
+  const push = (k, key, y) => { if (!sides.has(k)) sides.set(k, []); sides.get(k).push([key, y]); };
+  VIEW_EDGES.forEach((e, i) => {
+    const h = hops(e, i); if (!h) return;
+    const A = XY[e.from], B = XY[e.to], key = e.from + SEP + e.to;
+    push(e.from + "|r", key, h.length ? h[0].y : B.y + B.h / 2);
+    push(e.to + "|l", key, h.length ? h[h.length - 1].y : A.y + A.h / 2);
+  });
+  for (const [k, list] of sides) {
+    const [id, side] = k.split("|"), p = XY[id], span = Math.min(p.h - 24, 13 * (list.length - 1));
+    list.sort((a, b) => a[1] - b[1]).forEach(([key], j) =>
+      PORTS.set(key + side, p.y + p.h / 2 + (list.length > 1 ? -span / 2 + span * j / (list.length - 1) : 0)));
+  }
+}
+const cub = (a, b) => { const dx = Math.max(28, (b[0] - a[0]) / 2); return ` C${a[0] + dx},${a[1]} ${b[0] - dx},${b[1]} ${b[0]},${b[1]}`; };
+function route(e, i) {
+  const A = XY[e.from], B = XY[e.to], key = e.from + SEP + e.to, h = hops(e, i);
+  if (h) {
+    const s = [A.x + A.w, PORTS.get(key + "r") ?? A.y + A.h / 2], t = [B.x - 2, PORTS.get(key + "l") ?? B.y + B.h / 2];
+    let d = `M${s[0]},${s[1]}`, cur = s;
+    for (const w of h) { d += cub(cur, [w.x, w.y]) + ` L${w.x + w.w},${w.y}`; cur = [w.x + w.w, w.y]; }
+    d += cub(cur, t);
+    const m = h.length ? [h[0].x + h[0].w / 2, h[0].y] : [(s[0] + t[0]) / 2, (s[1] + t[1]) / 2];
+    return { d, mid: m, back: false };
+  }
+  // backwards or same column: loop underneath both cards
+  const x1 = A.x + A.w / 2, y1 = A.y + A.h, x2 = B.x + B.w / 2, y2 = B.y + B.h + 2, dip = 46 + Math.abs(x1 - x2) * 0.12;
+  const low = Math.max(y1, y2) + dip;
+  return { d: `M${x1},${y1} C${x1},${low} ${x2},${low} ${x2},${y2}`, mid: [(x1 + x2) / 2, low - dip * 0.25], back: true };
+}
+function drawEdges() {
+  ports();
+  const paths = [], hits = [], labels = $("labels"); labels.innerHTML = "";
+  VIEW_EDGES.forEach((e, i) => {
+    if (!XY[e.from] || !XY[e.to]) return;
+    const r = route(e, i), w = Math.min(4.5, 1.2 + Math.log2(e.weight || 1) * 0.75), k = esc(e.from + SEP + e.to);
+    paths.push(`<path data-k="${k}" class="${r.back ? "back" : ""} ${e.explicit && !e.weight ? "explicit" : ""}" d="${r.d}" stroke-width="${w}" marker-end="url(#arrow)"/>`);
+    hits.push(`<path class="hit" data-k="${k}" d="${r.d}"><title>${esc(edgeTitle(e))}</title></path>`);
+    if (e.labels.length) {
+      const l = document.createElement("div"); l.className = "elabel"; l.dataset.k = e.from + SEP + e.to;
+      l.textContent = [...new Set(e.labels)].join(", "); l.style.left = r.mid[0] + "px"; l.style.top = r.mid[1] + "px"; labels.appendChild(l);
+    }
+  });
+  $("paths").innerHTML = paths.join(""); $("hits").innerHTML = hits.join("");
+  for (const h of $("hits").children) {
+    h.onmouseenter = () => { S.hoverEdge = h.dataset.k; decorate(); };
+    h.onmouseleave = () => { S.hoverEdge = null; decorate(); };
+    h.onclick = (ev) => { ev.stopPropagation(); S.selEdge = h.dataset.k; S.sel = null; decorate(); panel(); };
+  }
+}
+const edgeTitle = (e) => `${label(e.from)} → ${label(e.to)}: ${[e.weight ? plural(e.weight, "import") : "", ...new Set(e.labels)].filter(Boolean).join(", ")}`;
+
+// ---- highlighting -----------------------------------------------------------------------------------
+// Hover or select a card: what it uses lights up blue, what uses it violet, everything else fades.
+function decorate() {
+  const step = S.flow ? S.flow.steps[S.step] : null, prev = S.flow && S.step > 0 ? S.flow.steps[S.step - 1] : null;
+  const cur = step && visibleRef(step.node), was = prev && visibleRef(prev.node);
+  const focus = S.flow ? null : (S.hover ?? S.sel), fEdge = S.flow ? null : (S.hoverEdge ?? (focus ? null : S.selEdge));
+  const nbOut = new Set(), nbIn = new Set();
+  if (focus) for (const e of VIEW_EDGES) { if (e.from === focus) nbOut.add(e.to); if (e.to === focus) nbIn.add(e.from); }
+  const [ea, eb] = fEdge ? fEdge.split(SEP) : [];
+  for (const el of $("nodes").children) {
+    const id = el.dataset.id;
+    el.classList.toggle("sel", id === S.sel && !S.flow);
+    el.classList.toggle("flow", id === cur);
+    el.classList.toggle("nb-out", nbOut.has(id)); el.classList.toggle("nb-in", nbIn.has(id) && !nbOut.has(id));
+    el.classList.toggle("dim", S.flow ? id !== cur && id !== was : focus ? id !== focus && !nbOut.has(id) && !nbIn.has(id) : fEdge ? id !== ea && id !== eb : false);
+  }
+  const cls = (k) => {
+    const [a, b] = k.split(SEP);
+    if (S.flow) return cur && was && ((a === was && b === cur) || (a === cur && b === was)) ? "hot" : "dim";
+    if (focus) return a === focus ? "out" : b === focus ? "in" : "dim";
+    if (fEdge) return k === fEdge ? "out" : "dim";
+    return "";
+  };
+  for (const p of $("paths").children) {
+    if (p.classList.contains("hop")) continue;
+    const c = cls(p.dataset.k);
+    p.classList.remove("out", "in", "hot", "dim"); if (c) p.classList.add(c);
+    p.style.strokeWidth = c && c !== "dim" ? Math.max(2.2, +p.getAttribute("stroke-width")) + "px" : "";
+    p.setAttribute("marker-end", c === "out" || c === "hot" ? "url(#arrow-out)" : c === "in" ? "url(#arrow-in)" : "url(#arrow)");
+  }
+  for (const l of $("labels").children) { const c = cls(l.dataset.k); l.classList.remove("out", "in", "dim"); if (c) l.classList.add(c === "hot" ? "out" : c); }
+  $("paths").querySelectorAll(".hop").forEach((x) => x.remove());
+  if (cur && was && cur !== was && !$("paths").querySelector(".hot")) {
+    const r = route({ from: was, to: cur }, -1), hop = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    hop.setAttribute("d", r.d); hop.setAttribute("class", "hop"); hop.setAttribute("marker-end", "url(#arrow-out)");
+    $("paths").appendChild(hop);
+  }
+}
+// The card on screen that stands for a ref: the file itself, its part, or nothing.
+function visibleRef(ref) { if (XY[ref]) return ref; const o = owner(ref); return XY[o] ? o : null; }
+
+// ---- navigation ------------------------------------------------------------------------------------
+function go(view, sel = null, focus = false) {
+  if (S.view !== view) { S.view = view; S.selEdge = null; S.hover = null; build(); if (!focus) fit(false); }
+  S.sel = sel; decorate(); panel(); if (focus && sel) center(visibleRef(sel));
+}
+function select(id) {
+  if (S.quiz && !S.revealed.has(id) && S.sel === id) return reveal(id);
+  S.sel = S.sel === id && !S.flow ? null : id; S.selEdge = null; decorate(); panel();
+}
+function reveal(id) { S.revealed.add(id); rebuildKeep(); }
+function rebuildKeep() { const t = $("world").style.transform; build(); $("world").style.transform = t; decorate(); panel(); }
+function crumbs() {
+  const c = $("crumbs");
+  c.innerHTML = S.view === "overview" ? `<b>Overview</b>` : `<a>Overview</a><span>/</span><b>${esc(label(S.view))}</b>`;
+  c.querySelectorAll("a").forEach((a) => (a.onclick = () => go("overview", S.view)));
+}
+
+// ---- pan & zoom ------------------------------------------------------------------------------------
+const T = { x: 0, y: 0, k: 1 };
+function apply(ease) {
+  const w = $("world"), st = $("stage"); w.classList.toggle("ease", !!ease);
+  w.style.transform = `translate(${T.x}px,${T.y}px) scale(${T.k})`;
+  st.style.backgroundSize = `${22 * T.k}px ${22 * T.k}px`; st.style.backgroundPosition = `${T.x}px ${T.y}px`;
+}
+function bounds() {
+  const v = Object.values(XY); if (!v.length) return { x: 0, y: 0, w: 1, h: 1 };
+  const x0 = Math.min(...v.map((p) => p.x)), y0 = Math.min(...v.map((p) => p.y)) - 20;
+  const x1 = Math.max(...v.map((p) => p.x + p.w)), y1 = Math.max(...v.map((p) => p.y + p.h)) + 80;
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+function fit(ease = true) {
+  const r = $("stage").getBoundingClientRect(), b = bounds(), pad = 48, low = S.flow ? 130 : 0;
+  T.k = Math.max(0.15, Math.min(1.1, (r.width - pad * 2) / b.w, (r.height - pad * 2 - low) / b.h));
+  T.x = (r.width - b.w * T.k) / 2 - b.x * T.k; T.y = (r.height - low - b.h * T.k) / 2 - b.y * T.k;
+  apply(ease);
+}
+function center(id) {
+  const p = XY[id]; if (!p) return;
+  const r = $("stage").getBoundingClientRect(); T.k = Math.max(T.k, 0.75);
+  T.x = r.width / 2 - (p.x + p.w / 2) * T.k; T.y = (r.height - 150) / 2 - (p.y + p.h / 2) * T.k; apply(true);
+}
+(() => {
+  const st = $("stage"); let drag = null;
+  st.addEventListener("pointerdown", (e) => { if (e.target.closest(".node,#flowbar,.hit")) return; drag = { x: e.clientX, y: e.clientY, tx: T.x, ty: T.y, moved: false }; st.setPointerCapture(e.pointerId); st.classList.add("drag"); });
+  st.addEventListener("pointermove", (e) => { if (!drag) return; T.x = drag.tx + e.clientX - drag.x; T.y = drag.ty + e.clientY - drag.y; drag.moved ||= Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3; apply(false); });
+  st.addEventListener("pointerup", () => { if (drag && !drag.moved && !S.flow) { S.sel = null; S.selEdge = null; decorate(); panel(); } drag = null; st.classList.remove("drag"); });
+  st.addEventListener("wheel", (e) => {
+    e.preventDefault(); const r = st.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const k = Math.min(2.5, Math.max(0.12, T.k * Math.exp(-e.deltaY * 0.0015)));
+    T.x = mx - (mx - T.x) * (k / T.k); T.y = my - (my - T.y) * (k / T.k); T.k = k; apply(false);
+  }, { passive: false });
+  st.addEventListener("dblclick", (e) => { if (!e.target.closest(".node") && S.view !== "overview") go("overview", S.view); });
+})();
+
+// ---- side panel ------------------------------------------------------------------------------------
+const link = (ref, text) => `<a data-ref="${esc(ref)}" title="${esc(ref)}">${esc(text ?? label(ref))}</a>`;
+function cardList(cs) {
+  if (!cs.length) return "";
+  return `<h3>Your cards here · ${cs.length}</h3><ul>${cs.map((c) => `<li class="card ${c.due ? "due" : ""}">${esc(c.q)}${c.ref ? ` <span class="mono">${esc(c.ref)}</span>` : ""}</li>`).join("")}</ul>
+    <p class="muted" style="font-size:12px">Answer in your head before opening the code.</p>`;
+}
+function rows(title, items) {
+  if (!items.length) return "";
+  return `<h3>${title}</h3><ul>${items.slice(0, 24).map(([r, n, t]) => `<li>${link(r, t)}<span class="n">${esc(n)}</span></li>`).join("")}</ul>`;
+}
+const how = (e) => [e.weight ? plural(e.weight, "import") : "", ...new Set(e.labels)].filter(Boolean).join(" · ");
+function panel() {
+  const el = $("panel"), id = S.sel;
+  let h = "";
+  if (S.selEdge && !id) {
+    const e = VIEW_EDGES.find((x) => x.from + SEP + x.to === S.selEdge);
+    if (e) {
+      h = `<div class="eyebrow">Connection</div><h2>${link(e.from)} <span style="color:var(--faint)">→</span> ${link(e.to)}</h2><p class="muted">${esc(how(e))}</p>`;
+      if (e.pairs.length) h += `<h3>Imports behind this arrow</h3><ul>${e.pairs.slice(0, 40).map(([s, t]) => `<li class="pair">${link(s, base(s))}<span>→</span>${link(t, base(t))}</li>`).join("")}</ul>`;
+      if (e.explicit) h += `<p class="muted" style="font-size:12px">Labelled links were added by hand in floorplan.json: things imports can't show.</p>`;
+    }
+  } else if (!id) {
+    const fs = Object.values(D.files), loc = fs.reduce((a, v) => a + v.loc, 0), all = Object.values(D.cards).flat(), due = all.filter((c) => c.due).length;
+    h = `<h2>${esc(D.project.name || D.root)}</h2><p class="muted">${esc(D.project.summary || "")}</p>
+      <div class="stats"><div><b>${D.parts.length}</b><span>parts</span></div><div><b>${fs.length}</b><span>files</span></div><div><b>${fmt(loc)}</b><span>lines</span></div>
+      ${all.length ? `<div><b>${all.length}</b><span>cards${due ? ` · <span style="color:var(--due)">${due} due</span>` : ""}</span></div>` : ""}</div>`;
+    if (D.flows.length) h += `<h3>Flows</h3>` + D.flows.map((f, i) => `<button class="flowbtn" data-flow="${i}">${esc(f.title)}<small>${esc(f.description || plural(f.steps.length, "step"))}</small></button>`).join("");
+    h += `<h3>Reading the map</h3><div class="key">
+      <svg width="26" height="8"><path d="M0,4 H24" stroke="#6ea8ff" stroke-width="2" stroke-dasharray="6 4"/></svg><span>uses: hover a card to light up what it depends on</span>
+      <svg width="26" height="8"><path d="M0,4 H24" stroke="#b98cff" stroke-width="2" stroke-dasharray="6 4"/></svg><span>used by: what depends on it</span>
+      <svg width="26" height="8"><path d="M0,4 H24" stroke="rgba(160,166,190,.6)" stroke-width="1.6" stroke-dasharray="1.5 4.5" stroke-linecap="round"/></svg><span>linked by hand (calls, data, events)</span>
+      <svg width="26" height="8"><path d="M0,4 H24" stroke="rgba(160,166,190,.6)" stroke-width="1.4" stroke-dasharray="4 5"/></svg><span>runs backwards, against the flow</span></div>
+      <p class="muted" style="font-size:12px;margin-top:12px">Thicker arrows carry more imports; click one to see them. Double-click a part to go inside. <b>Quiz</b> hides the names: say what each part does, then click it twice.</p>
+      <div class="legend">${[...new Set(D.parts.map((p) => p.kind))].map((k) => `<span style="--kc:${kc(k)}">${esc(k)}</span>`).join("")}</div>`;
+    if (D.unassigned.length) h += `<p class="muted" style="font-size:12px">${plural(D.unassigned.length, "file")} not on the map.</p>`;
+  } else if (parts[id]) {
+    const p = parts[id], st = partStats[id], shown = named(id);
+    h = `<div class="eyebrow" style="--kc:${kc(p.kind)}"><span class="dot"></span>${esc(p.kind)}</div><h2>${shown ? esc(p.label) : "What is this part?"}</h2>`;
+    h += shown ? `<p class="muted">${esc(p.summary || "")}</p>${p.details ? p.details.split(/\n\s*\n/).map((x) => `<p class="muted">${esc(x)}</p>`).join("") : ""}`
+      : `<p class="muted">Name it and say what it's responsible for, in one sentence, before revealing.</p><div class="actions"><button data-reveal="${esc(id)}">Reveal</button></div>`;
+    if (st.files) h += `<div class="stats"><div><b>${st.files}</b><span>files</span></div><div><b>${fmt(st.loc)}</b><span>lines</span></div>
+      ${st.routes ? `<div><b>${st.routes}</b><span>endpoints</span></div>` : ""}${st.heat ? `<div><b>${st.heat}</b><span>changes / yr</span></div>` : ""}</div>
+      ${S.view !== id ? `<div class="actions"><button data-go="${esc(id)}">Go inside →</button></div>` : ""}`;
+    h += rows("Uses", PE.filter((e) => e.from === id).map((e) => [e.to, how(e)]));
+    h += rows("Used by", PE.filter((e) => e.to === id).map((e) => [e.from, how(e)]));
+    const fs = (filesOf[id] || []).map((f) => [f, (usedBy[f] || []).length, base(f)]).sort((a, b) => b[1] - a[1]).map(([f, n, b]) => [f, `used by ${n}`, b]);
+    if (fs.length) h += rows("Files", fs);
+    h += cardList(partCards(id));
+  } else if (D.files[id]) {
+    const v = D.files[id], note = D.notes?.[id], p = parts[v.part];
+    h = `<div class="eyebrow" style="--kc:${kc(p.kind)}"><span class="dot"></span>${link(v.part)}</div><h2>${esc(base(id))}</h2><p class="mono" style="color:var(--faint)">${esc(id)}</p>`;
+    if (note) h += named(id) ? `<p class="muted">${esc(note)}</p>` : `<p class="muted">What does this file do?</p><div class="actions"><button data-reveal="${esc(id)}">Reveal</button></div>`;
+    h += `<div class="stats"><div><b>${fmt(v.loc)}</b><span>lines</span></div>${v.heat ? `<div><b>${v.heat}</b><span>changes / yr</span></div>` : ""}</div>`;
+    if (v.routes.length) h += `<h3>Endpoints</h3><ul>${v.routes.map(([m, p, l]) => `<li><span class="mono">${esc(m)} ${esc(p)}</span><span class="n">:${l}</span></li>`).join("")}</ul>`;
+    const other = (t) => D.files[t].part === v.part ? "" : label(D.files[t].part);
+    h += rows("Uses", (uses[id] || []).map((t) => [t, other(t), base(t)]));
+    h += rows("Used by", (usedBy[id] || []).map((t) => [t, other(t), base(t)]));
+    h += cardList(cardsOn(id));
+  }
+  el.innerHTML = h;
+  el.querySelectorAll("[data-ref]").forEach((a) => (a.onclick = () => jump(a.dataset.ref)));
+  el.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go(b.dataset.go)));
+  el.querySelectorAll("[data-flow]").forEach((b) => (b.onclick = () => startFlow(D.flows[+b.dataset.flow])));
+  el.querySelectorAll("[data-reveal]").forEach((b) => (b.onclick = () => reveal(b.dataset.reveal)));
+}
+function jump(ref) {
+  if (XY[ref]) return select(ref);
+  if (parts[ref]) return go("overview", ref, true);
+  go(D.files[ref].part, ref, true);
+}
+
+// ---- flows -----------------------------------------------------------------------------------------
+function startFlow(f) { S.flow = f; S.step = 0; S.sel = null; S.selEdge = null; $("flowbar").style.display = "block"; stepTo(0); }
+function stepTo(i) {
+  const f = S.flow; S.step = Math.max(0, Math.min(f.steps.length - 1, i)); S.noteShown = !S.quiz;
+  const ref = f.steps[S.step].node;
+  // Files are shown inside their part; a part is shown on the overview unless it is visible here.
+  const want = D.files[ref] ? D.files[ref].part : (XY[ref] ? S.view : "overview");
+  if (S.view !== want) { S.view = want; build(); }
+  S.sel = ref; decorate(); panel(); center(visibleRef(ref)); flowbar();
+}
+function flowbar() {
+  const f = S.flow, s = f.steps[S.step];
+  $("ftitle").textContent = f.title; $("fstep").textContent = `${S.step + 1}/${f.steps.length}`;
+  $("fprog").style.width = `${100 * (S.step + 1) / f.steps.length}%`;
+  $("fwhere").textContent = parts[s.node] ? label(s.node) : s.node;
+  $("fnote").innerHTML = S.noteShown ? esc(s.note || s.title || "") : `<span style="color:var(--muted)">${f.tour ? "What is this, and why is it a stop on the tour?" : S.step === 0 ? "Where does this flow start, and what triggers it?" : "What happens here, and where does it go next?"}</span> <button id="fshow">Show</button>`;
+  const b = $("fshow"); if (b) b.onclick = () => { S.noteShown = true; flowbar(); };
+  $("fprev").disabled = S.step === 0; $("fnext").disabled = S.step === f.steps.length - 1;
+}
+function endFlow() { S.flow = null; $("flowbar").style.display = "none"; decorate(); panel(); }
+$("fprev").onclick = () => stepTo(S.step - 1);
+$("fnext").onclick = () => stepTo(S.step + 1);
+$("fclose").onclick = endFlow;
+
+// ---- search ----------------------------------------------------------------------------------------
+const index = [...D.parts.map((p) => ({ ref: p.id, text: `${p.label} ${p.summary || ""} ${p.id}`, title: () => label(p.id), sub: p.kind })),
+  ...Object.keys(D.files).map((f) => ({ ref: f, text: f + " " + (D.notes?.[f] || ""), title: () => base(f), sub: f }))];
+let hits = [], hi = 0;
+$("q").oninput = () => {
+  const words = $("q").value.toLowerCase().split(/\s+/).filter(Boolean);
+  hits = words.length ? index.filter((x) => words.every((w) => (S.quiz && parts[x.ref] && !named(x.ref) ? x.ref : x.text).toLowerCase().includes(w))).slice(0, 30) : [];
+  hi = 0; results();
+};
+function results() {
+  const r = $("results"); r.style.display = hits.length ? "block" : "none";
+  r.innerHTML = hits.map((x, i) => `<div class="${i === hi ? "hi" : ""}" data-i="${i}">${esc(x.title())}<small class="mono">${esc(x.sub)}</small></div>`).join("");
+  r.querySelectorAll("div").forEach((d) => (d.onmousedown = () => pick(+d.dataset.i)));
+}
+function pick(i) { const x = hits[i]; if (!x) return; $("q").value = ""; hits = []; results(); $("q").blur(); jump(x.ref); }
+$("q").onkeydown = (e) => {
+  if (e.key === "ArrowDown") { hi = Math.min(hits.length - 1, hi + 1); results(); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { hi = Math.max(0, hi - 1); results(); e.preventDefault(); }
+  else if (e.key === "Enter") pick(hi);
+  else if (e.key === "Escape") { $("q").value = ""; hits = []; results(); $("q").blur(); }
+};
+$("q").onblur = () => setTimeout(() => { $("results").style.display = "none"; }, 150);
+
+// ---- controls ---------------------------------------------------------------------------------------
+function setQuiz(on) {
+  S.quiz = on; S.revealed.clear(); $("quiz").classList.toggle("on", on);
+  try { localStorage.setItem("fp-quiz", on ? "1" : "0"); } catch (e) {}
+  rebuildKeep(); if (S.flow) stepTo(S.step);
+}
+$("quiz").onclick = () => setQuiz(!S.quiz);
+$("fit").onclick = () => fit();
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "/") { $("q").focus(); e.preventDefault(); }
+  else if (e.key === "q") setQuiz(!S.quiz);
+  else if (e.key === "f") fit();
+  else if (S.flow && e.key === "ArrowRight") stepTo(S.step + 1);
+  else if (S.flow && e.key === "ArrowLeft") stepTo(S.step - 1);
+  else if (e.key === "Escape") { if (S.flow) endFlow(); else if (S.sel || S.selEdge) { S.sel = S.selEdge = null; decorate(); panel(); } else if (S.view !== "overview") go("overview", S.view); }
+  else if (e.key === "Backspace" && S.view !== "overview") go("overview", S.view);
+});
+window.addEventListener("resize", () => fit(false));
+
+$("title").textContent = D.project.name || D.root;
+document.title = (D.project.name || D.root) + " floorplan";
+$("quiz").classList.toggle("on", S.quiz);
+build(); fit(false); panel();
+// Deep links: #part=<id>, #sel=<ref>, #edge=<from>><to>, #hover=<ref>, #flow=<n>&step=<n>, #quiz=1
+(() => {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("quiz") === "1" && !S.quiz) setQuiz(true);
+  if (h.get("part") && parts[h.get("part")]) go(h.get("part"));
+  if (h.get("sel")) jump(h.get("sel"));
+  if (h.get("edge")) { S.selEdge = h.get("edge").replace(">", SEP); decorate(); panel(); }
+  if (h.get("hover")) { S.hover = h.get("hover"); decorate(); }
+  if (h.get("flow") && D.flows[+h.get("flow")]) { startFlow(D.flows[+h.get("flow")]); if (h.get("step")) stepTo(+h.get("step")); }
+})();
+</script>
+</body>
+</html>
